@@ -258,6 +258,11 @@ class DownscaleBlock(layers.Layer):
         self.convB = layers.Conv2D(filters, kernel_size, strides, padding)
         self.reluA = layers.LeakyReLU(alpha=0.2)
         self.reluB = layers.LeakyReLU(alpha=0.2)
+        
+        # model 2 swish
+        #self.reluA = tf.keras.layers.Activation('swish')
+        #self.reluB = tf.keras.layers.Activation('swish')
+        
         self.bn2a = tf.keras.layers.BatchNormalization()
         self.bn2b = tf.keras.layers.BatchNormalization()
 
@@ -287,6 +292,11 @@ class UpscaleBlock(layers.Layer):
         self.convB = layers.Conv2D(filters, kernel_size, strides, padding)
         self.reluA = layers.LeakyReLU(alpha=0.2)
         self.reluB = layers.LeakyReLU(alpha=0.2)
+        
+        # model 2 swish
+        #self.reluA = tf.keras.layers.Activation('swish')
+        #self.reluB = tf.keras.layers.Activation('swish')
+        
         self.bn2a = tf.keras.layers.BatchNormalization()
         self.bn2b = tf.keras.layers.BatchNormalization()
         self.conc = layers.Concatenate()
@@ -314,6 +324,10 @@ class BottleNeckBlock(layers.Layer):
         self.convB = layers.Conv2D(filters, kernel_size, strides, padding)
         self.reluA = layers.LeakyReLU(alpha=0.2)
         self.reluB = layers.LeakyReLU(alpha=0.2)
+        # model 2 swish
+        #self.reluA = tf.keras.layers.Activation('swish')
+        #self.reluB = tf.keras.layers.Activation('swish')
+        
 
     def call(self, x):
         x = self.convA(x)
@@ -332,7 +346,54 @@ We will optimize 3 losses in our mode.
 Out of the three loss functions, SSIM contributes the most to improving model performance.
 """
 
+"""
+model 1
 
+def __init__(self):
+        super().__init__()
+        self.ssim_loss_weight = 0.85
+        self.l1_loss_weight = 0.1
+        self.edge_loss_weight = 0.9
+        self.loss_metric = tf.keras.metrics.Mean(name="loss")
+        f = [16, 32, 64, 128, 256]
+        self.downscale_blocks = [
+            DownscaleBlock(f[0]),
+            DownscaleBlock(f[1]),
+            DownscaleBlock(f[2]),
+            DownscaleBlock(f[3]),
+        ]
+        self.bottle_neck_block = BottleNeckBlock(f[4])
+        self.upscale_blocks = [
+            UpscaleBlock(f[3]),
+            UpscaleBlock(f[2]),
+            UpscaleBlock(f[1]),
+            UpscaleBlock(f[0]),
+        ]
+
+
+model 2
+
+def __init__(self):
+        super().__init__()
+        self.ssim_loss_weight = 0.85
+        self.l1_loss_weight = 0.1
+        self.edge_loss_weight = 0.9
+        self.loss_metric = tf.keras.metrics.Mean(name="loss")
+        f = [16, 32, 64, 128, 256]
+        self.downscale_blocks = [
+            DownscaleBlock(f[0]),
+            DownscaleBlock(f[1]),
+            DownscaleBlock(f[2]),
+            #DownscaleBlock(f[3]),
+        ]
+        self.bottle_neck_block = BottleNeckBlock(f[3])
+        self.upscale_blocks = [
+            #UpscaleBlock(f[3]),
+            UpscaleBlock(f[2]),
+            UpscaleBlock(f[1]),
+            UpscaleBlock(f[0]),
+        ]
+"""
 class DepthEstimationModel(tf.keras.Model):
     def __init__(self):
         super().__init__()
@@ -437,6 +498,44 @@ class DepthEstimationModel(tf.keras.Model):
     def save_model_image(self, x):
         dummy_model = tf.keras.Model(inputs=[x], outputs=[self.call(x)])
         tf.keras.utils.plot_model(dummy_model, to_file="Model.png", show_shapes=True)
+
+
+"""
+model 1
+    def call(self, x):
+        c1, p1 = self.downscale_blocks[0](x)
+        c2, p2 = self.downscale_blocks[1](p1)
+        c3, p3 = self.downscale_blocks[2](p2)
+        c4, p4 = self.downscale_blocks[3](p3)
+
+        bn = self.bottle_neck_block(p4)
+
+        u1 = self.upscale_blocks[0](bn, c4)
+        u2 = self.upscale_blocks[1](u1, c3)
+        u3 = self.upscale_blocks[2](u2, c2)
+        u4 = self.upscale_blocks[3](u3, c1)
+        
+        return self.conv_layer(u4)
+
+model 2
+    def call(self, x):
+        c1, p1 = self.downscale_blocks[0](x)
+        c2, p2 = self.downscale_blocks[1](p1)
+        c3, p3 = self.downscale_blocks[2](p2)
+        #c4, p4 = self.downscale_blocks[3](p3)
+
+        bn = self.bottle_neck_block(p3)
+
+        #u1 = self.upscale_blocks[0](bn, c4)
+        u1 = self.upscale_blocks[0](bn, c3)
+        u2 = self.upscale_blocks[1](u1, c2)
+        u3 = self.upscale_blocks[2](u2, c1)
+        #u4 = self.upscale_blocks[3](u3, c1)
+        
+        return self.conv_layer(u3)
+"""
+
+
 """
 ## Model training
 """
@@ -490,6 +589,43 @@ test_loader = next(
     )
 )
 visualize_depth_map(test_loader, test=True, model=model, name="output1")
+
+def ssim(im1, im2):
+    mean1 = np.mean(im1)
+    mean2 = np.mean(im2)
+    var1 = np.var(im1)
+    var2 = np.var(im2)
+    covar = np.mean((im1-mean1)*(im2-mean2))
+    c1 = np.square(0.01 * 255)
+    c2 = np.square(0.03 * 255)
+    num = (2 * mean1 * mean2 + c1) * (2 * covar + c2)
+    denom = (mean1**2 + mean2**2 + c1) * (var1 + var2 + c2)
+    val = num / denom
+    return val
+
+def calc_ssim(samples, model):
+    input, target = samples
+    pred = model.predict(input)
+    cmap = plt.get_cmap('rainbow')
+    fix, ax = plt.subplots(6,3, figsize=(50,50))
+    for i in range(6):
+        im0 = input[i].squeeze()
+        im1 = target[i].squeeze()
+        im2 = pred[i].squeeze()
+        ss = ssim(im1, im2)
+        print("i, ssim: ", i, ssim)
+        ax[i, 0].imshow((im0.squeeze()))
+        ax[i, 1].imshow((im1.squeeze()), cmap=cmap)
+        ax[i, 2].imshow((im2.squeeze()), cmap=cmap)
+    plt.savefig("output.png")
+
+print(model.summary())
+
+visualize_samples =  next(
+    iter(DataGenerator(data=df, batch_size=6, dim=(HEIGHT, WIDTH)))
+)
+calc_ssim(visualize_samples, model=model)
+
 
 """
 ## Possible improvements
