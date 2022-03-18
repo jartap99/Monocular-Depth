@@ -1,4 +1,10 @@
 """
+Modified this model for CS231 Project - Varo Ly , Rajeev Patwari
+https://keras.io/examples/vision/depth_estimation/
+
+"""
+
+"""
 Title: Monocular depth estimation
 Author: [Victor Basu](https://www.linkedin.com/in/victor-basu-520958147)
 Date created: 2021/08/30
